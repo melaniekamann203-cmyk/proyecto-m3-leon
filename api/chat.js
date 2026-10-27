@@ -1,8 +1,9 @@
 // Función serverless de Vercel: /api/chat
 // La API key se configura en Vercel como variable de entorno GEMINI_API_KEY
 
-const MODEL = "gemini-flash-latest";
-const TIMEOUT_MS = 25000; // si Gemini tarda más de 25 s, se corta y avisa
+// Si un modelo está saturado, prueba con el siguiente
+const MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash"];
+const TIMEOUT_MS = 12000; // tiempo máximo por intento
 
 const COMMON = `
 Respondé siempre en español, en personaje, en 1 a 4 oraciones.
@@ -67,44 +68,51 @@ export default async function handler(req, res) {
     parts: [{ text: m.text }],
   }));
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  let lastError = "Error al hablar con la IA";
 
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": process.env.GEMINI_API_KEY,
-        },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: persona + COMMON }] },
-          contents,
-        }),
-        signal: controller.signal,
+  for (const model of MODELS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": process.env.GEMINI_API_KEY,
+          },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: persona + COMMON }] },
+            contents,
+          }),
+          signal: controller.signal,
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok) {
+        const reply = (data?.candidates?.[0]?.content?.parts || [])
+          .map((p) => p.text || "")
+          .join("")
+          .trim();
+        if (reply) return res.status(200).json({ reply });
+        lastError = "La IA no devolvió texto";
+      } else {
+        console.error(`Error de Gemini (${model}):`, JSON.stringify(data));
+        lastError = data?.error?.message || `Gemini respondió ${response.status}`;
+        // Clave inválida o pedido mal armado: no tiene sentido probar otro modelo
+        if (response.status === 400 || response.status === 401 || response.status === 403) break;
       }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error("Error de Gemini:", JSON.stringify(data));
-      return res.status(502).json({ error: data?.error?.message || `Gemini respondió ${response.status}` });
+    } catch (error) {
+      console.error(`Fallo con ${model}:`, error);
+      lastError = error.name === "AbortError" ? "Gemini tardó demasiado en responder" : "Error al hablar con la IA";
+    } finally {
+      clearTimeout(timer);
     }
-
-    const reply = (data?.candidates?.[0]?.content?.parts || [])
-      .map((p) => p.text || "")
-      .join("")
-      .trim();
-
-    return res.status(200).json({ reply: reply || "Sin señal. Intentá de nuevo." });
-  } catch (error) {
-    console.error(error);
-    const msg = error.name === "AbortError" ? "Gemini tardó demasiado en responder" : "Error al hablar con la IA";
-    return res.status(500).json({ error: msg });
-  } finally {
-    clearTimeout(timer);
   }
+
+  return res.status(502).json({ error: lastError });
 }
