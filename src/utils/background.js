@@ -6,8 +6,6 @@ const IMAGES = [
   "/img/fondo4.jpg",
   "/img/fondo5.jpg",
   "/img/fondo6.jpg",
-  "/img/fondo7.jpg",
-  "/img/fondo8.jpg",
 ];
 
 const INTERVAL = 7000; // milisegundos entre cada foto
