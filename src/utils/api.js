@@ -6,7 +6,12 @@ export async function sendMessage(character, history) {
     body: JSON.stringify({ character, history }),
   });
 
-  if (!res.ok) throw new Error(`Error ${res.status}`);
-  const data = await res.json();
+  // Intentamos leer el JSON aunque la respuesta sea de error,
+  // para mostrar el mensaje que manda el servidor
+  const data = await res.json().catch(() => ({}));
+
+  if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+  if (!data.reply) throw new Error("La respuesta no trajo texto");
+
   return data.reply;
 }
