@@ -1,6 +1,8 @@
 // Función serverless de Vercel: /api/chat
 // La API key se configura en Vercel como variable de entorno GEMINI_API_KEY
 
+import { buildContents, extractText } from "../lib/gemini.js";
+
 // Si un modelo está saturado, prueba con el siguiente
 const MODELS = ["gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash"];
 const TIMEOUT_MS = 12000; // tiempo máximo por intento
@@ -61,12 +63,10 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Falta la variable GEMINI_API_KEY en Vercel" });
   }
 
-  // Gemini exige que la conversación empiece con un mensaje del usuario
-  const firstUser = history.findIndex((m) => m.role === "user");
-  const contents = history.slice(firstUser).map((m) => ({
-    role: m.role === "user" ? "user" : "model",
-    parts: [{ text: m.text }],
-  }));
+  const contents = buildContents(history);
+  if (contents.length === 0) {
+    return res.status(400).json({ error: "El historial no tiene mensajes del usuario" });
+  }
 
   let lastError = "Error al hablar con la IA";
 
@@ -94,10 +94,7 @@ export default async function handler(req, res) {
       const data = await response.json();
 
       if (response.ok) {
-        const reply = (data?.candidates?.[0]?.content?.parts || [])
-          .map((p) => p.text || "")
-          .join("")
-          .trim();
+        const reply = extractText(data);
         if (reply) return res.status(200).json({ reply });
         lastError = "La IA no devolvió texto";
       } else {
