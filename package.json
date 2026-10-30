@@ -1,0 +1,16 @@
+{
+  "name": "proyecto-m3-leon",
+  "version": "1.0.0",
+  "description": "SPA para chatear con personajes de Resident Evil usando la API de Gemini (Proyecto M3 - Henry)",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "author": "Melanie Kamann",
+  "license": "ISC",
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}
